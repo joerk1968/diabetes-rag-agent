@@ -1,0 +1,18 @@
+Educational blood pressure categories (mmHg):
+
+Normal:
+- Systolic below 120 AND diastolic below 80
+
+Elevated:
+- Systolic 120–129 AND diastolic below 80
+
+Hypertension Stage 1:
+- Systolic 130–139 OR diastolic 80–89
+
+Hypertension Stage 2:
+- Systolic 140 or higher OR diastolic 90 or higher
+
+Hypertensive crisis:
+- Systolic above 180 OR diastolic above 120
+
+Values are for educational analysis only.

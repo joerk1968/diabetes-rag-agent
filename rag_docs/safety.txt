@@ -1,0 +1,6 @@
+Safety policy:
+
+- All outputs are educational only and based on synthetic data.
+- No diagnosis, no medication dosing, no emergency treatment instructions.
+- If values are extremely abnormal, advise contacting a healthcare professional.
+- Always explain findings using retrieved context.

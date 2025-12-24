@@ -1,0 +1,8 @@
+Glucose trend interpretation rules (educational):
+
+- Repeated post-meal glucose values above 180 mg/dL may indicate hyperglycemia.
+- Large fluctuations between high and low glucose values indicate high variability.
+- Rapid downward changes in glucose increase hypoglycemia risk.
+- Persistent elevated glucose levels may require lifestyle or clinical review.
+
+Do not diagnose or prescribe medication.

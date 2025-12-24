@@ -1,0 +1,15 @@
+Educational glucose reference ranges (synthetic data):
+
+Hypoglycemia:
+- Glucose below 70 mg/dL
+- Severe hypoglycemia below 54 mg/dL
+
+Typical guideline-based targets:
+- Fasting glucose: 80–130 mg/dL
+- Post-meal glucose: below 180 mg/dL
+
+Hyperglycemia:
+- Glucose above 180 mg/dL after meals
+- Very high glucose above 250 mg/dL may indicate poor control
+
+These ranges are for educational analysis only.
