@@ -343,19 +343,17 @@ if __name__ == "__main__":
 
     print("🚀 Continuous monitoring started (every 5 minutes)")
     print("📱 WhatsApp alerts enabled for CRITICAL events only")
-    print("Press CTRL+C to stop\n")
 
     ensure_dirs()
     vectorstore = build_vectorstore()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-while True:
-    try:
-        print("\n⏱ Starting monitoring cycle...")
-        monitoring_cycle(llm, vectorstore)
-        print("✅ Cycle complete. Waiting 5 minutes...\n")
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
+    while True:
+        try:
+            print("\n⏱ Starting monitoring cycle...")
+            monitoring_cycle(llm, vectorstore)
+            print("✅ Cycle complete. Waiting 5 minutes...\n")
+        except Exception as e:
+            print(f"❌ ERROR: {e}")
 
-    time.sleep(300)
-
+        time.sleep(300)
