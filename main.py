@@ -349,13 +349,13 @@ if __name__ == "__main__":
     vectorstore = build_vectorstore()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-   while True:
+while True:
     try:
-        print("\n-------------------------------")
-        print("⏱️  New monitoring cycle started at", now_beirut())
+        print("\n⏱ Starting monitoring cycle...")
         monitoring_cycle(llm, vectorstore)
         print("✅ Cycle complete. Waiting 5 minutes...\n")
     except Exception as e:
-        print("❌ ERROR during monitoring cycle:", str(e))
+        print(f"❌ ERROR: {e}")
 
-    time.sleep(300)  # 5 minutes
+    time.sleep(300)
+
