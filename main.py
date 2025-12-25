@@ -1,9 +1,12 @@
+from zoneinfo import ZoneInfo
 import os
 import csv
+import time
+import sys
 import random
 from datetime import datetime, timezone
 from dotenv import load_dotenv
-
+from twilio.rest import Client
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import TextLoader
@@ -29,8 +32,9 @@ BP_CRISIS_DIA = 120
 # =========================
 # UTILS
 # =========================
-def now_utc():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+def now_beirut():
+    beirut_tz = ZoneInfo("Asia/Beirut")
+    return datetime.now(beirut_tz).strftime("%H:%M")
 
 def ensure_dirs():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -134,10 +138,20 @@ def build_vectorstore():
 
 
 def llm_advisor(llm, vectorstore, patient_id, payload):
+    """
+    Clinical decision-support style advisor.
+    - Uses RAG context
+    - Concise, action-oriented
+    - No diagnosis
+    - No medication dosing
+    """
+
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
     query = f"""
-Analyze the following SYNTHETIC patient data and provide EDUCATIONAL advice only.
+You are a clinical decision-support assistant assisting a physician.
+You are NOT diagnosing and NOT prescribing medication.
+All data is SYNTHETIC.
 
 Patient ID: {patient_id}
 Timestamp: {payload['timestamp']}
@@ -146,64 +160,124 @@ Measurements:
 - Glucose: {payload['glucose']} mg/dL ({payload['glucose_context']})
 - Blood Pressure: {payload['sys']}/{payload['dia']} mmHg ({payload['bp_context']})
 
-Detected flags:
-- Glucose: {payload['glucose_flag']}
-- Blood Pressure: {payload['bp_flag']}
+Flags:
+- Glucose flag: {payload['glucose_flag']}
+- Blood pressure flag: {payload['bp_flag']}
 
-Instructions:
-- Explain what these abnormal values mean
-- Use only retrieved context
+TASK:
+Provide concise, clinician-style guidance focused on risk assessment and next actions.
+
+RULES:
+- Be brief and professional
+- No long explanations
 - No diagnosis
-- No medication
-- Provide general monitoring advice
-- State clearly this is educational and based on synthetic data
+- No medication dosing
+- Escalation-focused language only
 
-Output format:
-Summary:
-Why it matters:
-Suggested next steps:
-Safety note:
+OUTPUT FORMAT (STRICT – DO NOT ADD EXTRA TEXT):
+
+CLINICAL_SUMMARY:
+(one short sentence)
+
+KEY_RISK:
+(one short sentence)
+
+RECOMMENDED_ACTION:
+- bullet point
+- bullet point
+
+ESCALATION_CRITERIA:
+(one short sentence)
 """
 
-    docs = retriever.get_relevant_documents(query)
-    context = "\n\n".join(d.page_content for d in docs)
+    # Retrieve RAG co
 
-    prompt = f"""
-AUTHORITATIVE CONTEXT:
-{context}
 
-USER QUERY:
-{query}
+# =========================
+# ALERT CONFIG (TWILIO - REAL)
+# =========================
+
+PATIENT_CONTACTS = {
+    "patient_001": {
+        "phone": "+9613929206",
+        "whatsapp": "+9613929206"
+    },
+    "patient_002": {
+        "phone": "+9613929206",
+        "whatsapp": "+9613929206"
+    },
+    "patient_003": {
+        "phone": "+9613929206",
+        "whatsapp": "+9613929206"
+    }
+}
+
+CRITICAL_GLUCOSE_FLAGS = {"very_low_glucose", "very_high_glucose"}
+CRITICAL_BP_FLAGS = {"bp_crisis"}
+
+# =========================
+# ALERTING (TWILIO REAL)
+# =========================
+
+def get_twilio_client():
+    return Client(
+        os.getenv("TWILIO_ACCOUNT_SID"),
+        os.getenv("TWILIO_AUTH_TOKEN")
+    )
+
+
+
+def send_whatsapp(phone_number, message):
+    try:
+        client = get_twilio_client()
+        client.messages.create(
+            body=message,
+            from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_FROM')}",
+            to=f"whatsapp:{phone_number}"
+        )
+        print(f"✅ WhatsApp alert sent to {phone_number}")
+    except Exception as e:
+        print("⚠️ WhatsApp alert FAILED (will not crash monitoring)")
+        print(str(e))
+
+
+def trigger_alerts(patient_id, payload, advice):
+    contact = PATIENT_CONTACTS.get(patient_id)
+    if not contact:
+        return
+
+    short_alert = f"""
+⚠️ HEALTH ALERT
+
+BP: {payload['sys']}/{payload['dia']} mmHg
+Glucose: {payload['glucose']} mg/dL
+
+Action:
+• Rest now
+• Recheck vitals
+• If persists → seek medical care
+
+(Time: {payload['timestamp']})
 """
 
-    return llm.invoke(prompt).content
-
+    send_whatsapp(contact["whatsapp"], short_alert)
 
 # =========================
 # MAIN
 # =========================
-def main():
-    load_dotenv()
-
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY not set")
-
-    ensure_dirs()
-
-    vectorstore = build_vectorstore()
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
+def monitoring_cycle(llm, vectorstore):
     for pid in PATIENT_IDS:
-        ts = now_utc()
+        ts = now_beirut()
+
 
         g_context = random.choice(["fasting", "post_meal", "random"])
         bp_context = random.choice(["rest", "stress"])
 
         glucose = synthetic_glucose(g_context)
-        sys, dia = synthetic_bp(bp_context)
+        sys_val, dia_val = synthetic_bp(bp_context)
 
         g_abn, g_flag = glucose_flag(glucose)
-        bp_abn, bp_flag_value = bp_flag(sys, dia)
+        bp_abn, bp_flag_value = bp_flag(sys_val, dia_val)
 
         if not (g_abn or bp_abn):
             continue  # abnormal only
@@ -213,8 +287,8 @@ def main():
             "glucose": glucose,
             "glucose_context": g_context,
             "glucose_flag": g_flag,
-            "sys": sys,
-            "dia": dia,
+            "sys": sys_val,
+            "dia": dia_val,
             "bp_context": bp_context,
             "bp_flag": bp_flag_value,
         }
@@ -241,7 +315,7 @@ def main():
         print("\n" + "=" * 60)
         print(f"ABNORMAL EVENT | {pid} | {ts}")
         print(f"Glucose: {glucose} mg/dL ({g_context}) → {g_flag}")
-        print(f"BP: {sys}/{dia} mmHg ({bp_context}) → {bp_flag_value}")
+        print(f"BP: {sys_val}/{dia_val} mmHg ({bp_context}) → {bp_flag_value}")
         print("-" * 60)
         print(advice)
         print("=" * 60)
@@ -252,6 +326,36 @@ def main():
             {"timestamp": ts, "advice": advice},
         )
 
+        # 🔔 CRITICAL ALERT → WHATSAPP ONLY
+        if (
+            payload["glucose_flag"] in CRITICAL_GLUCOSE_FLAGS
+            or payload["bp_flag"] in CRITICAL_BP_FLAGS
+        ):
+            trigger_alerts(pid, payload, advice)
+
 
 if __name__ == "__main__":
-    main()
+    load_dotenv()
+
+    if not os.getenv("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY not set")
+        sys.exit(1)
+
+    print("🚀 Continuous monitoring started (every 5 minutes)")
+    print("📱 WhatsApp alerts enabled for CRITICAL events only")
+    print("Press CTRL+C to stop\n")
+
+    ensure_dirs()
+    vectorstore = build_vectorstore()
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+   while True:
+    try:
+        print("\n-------------------------------")
+        print("⏱️  New monitoring cycle started at", now_beirut())
+        monitoring_cycle(llm, vectorstore)
+        print("✅ Cycle complete. Waiting 5 minutes...\n")
+    except Exception as e:
+        print("❌ ERROR during monitoring cycle:", str(e))
+
+    time.sleep(300)  # 5 minutes
